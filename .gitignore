@@ -86,13 +86,18 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# Model files (large files)
-*.pkl
+# Model files (large files) - but allow essential trained models
 *.joblib
 *.h5
 *.pt
 *.pth
 *.onnx
+
+# Exclude all pkl files except essential trained models
+*.pkl
+!models/logistic_model.pkl
+!models/vectorizer.pkl
+!models/training_results.json
 
 # Data files (if large)
 # Uncomment if you want to exclude large datasets
