@@ -307,10 +307,12 @@ def make_prediction(text, models, preprocessor, model_choice):
 
         # Map UI choices to our actual models
         model_map = {
-            "Naive Bayes": "logistic",  # We use logistic regression
-            "Random Forest": "logistic",  # Fallback to logistic
-            "LSTM": "logistic",  # Fallback to logistic
-            "BERT": "logistic",  # Fallback to logistic
+            "Naive Bayes (94.4%)": "naive_bayes",
+            "Random Forest (98.0%)": "random_forest",
+            "Logistic Regression (97.4%)": "logistic",
+            # Legacy mappings for backwards compatibility
+            "Naive Bayes": "naive_bayes",
+            "Random Forest": "random_forest",
             "Logistic Regression": "logistic"
         }
 
@@ -481,12 +483,24 @@ def main():
     with st.sidebar:
         st.markdown("## ⚙️ Settings")
         
-        # Model selection
-        available_models = ["Logistic Regression"]
+        # Model selection - get available models dynamically
+        loader = get_model_loader()
+        if loader and loader.get_available_models():
+            # Map internal model names to user-friendly names
+            model_display_names = {
+                "logistic": "Logistic Regression (97.4%)",
+                "naive_bayes": "Naive Bayes (94.4%)",
+                "random_forest": "Random Forest (98.0%)"
+            }
+            available_models = [model_display_names.get(model, model.title())
+                              for model in loader.get_available_models()]
+        else:
+            available_models = ["No models available"]
+
         model_choice = st.selectbox(
             "Select Model",
             available_models,
-            help="Our trained model for fake news detection"
+            help="Choose between different trained models with varying accuracy"
         )
         
         # Confidence threshold
