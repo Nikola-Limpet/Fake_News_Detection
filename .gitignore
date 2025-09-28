@@ -96,8 +96,13 @@ $RECYCLE.BIN/
 # Exclude all pkl files except essential trained models
 *.pkl
 !models/logistic_model.pkl
+!models/naive_bayes_model.pkl
+!models/random_forest_model.pkl
 !models/vectorizer.pkl
 !models/training_results.json
+
+# Exclude ensemble model (too large for GitHub - 5MB)
+models/ensemble_model.pkl
 
 # Data files (if large)
 # Uncomment if you want to exclude large datasets
