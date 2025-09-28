@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  fake-news-app:
+    build: .
+    container_name: fake-news-detection
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NEWS_API_KEY=${NEWS_API_KEY}
+    restart: unless-stopped
+    networks:
+      - fake-news-network
+
+  training-monitor:
+    build: .
+    container_name: training-monitor
+    command: streamlit run training_monitor.py --server.port=8502 --server.address=0.0.0.0
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - fake-news-network
+
+networks:
+  fake-news-network:
+    driver: bridge
