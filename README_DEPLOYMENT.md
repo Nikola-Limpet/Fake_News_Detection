@@ -32,12 +32,27 @@
 - **`models/`** - Pre-trained ML models (included in repo)
 - **`model_utils.py`** - Model loading utilities
 
-### 🔧 Environment Variables (Optional)
+### 🔧 Environment Variables
 
-If using NewsAPI features, add in Streamlit Cloud secrets:
+**NewsAPI Key Setup** (enables real-time news fetching):
+
+**For Streamlit Cloud:**
+1. Go to your app dashboard on share.streamlit.io
+2. Click "⚙️ Settings" → "Secrets"
+3. Add this to your secrets:
 ```toml
-NEWS_API_KEY = "your_newsapi_key_here"
+NEWS_API_KEY = "1c5db918d7584047b8f24d017a835f31"
 ```
+
+**For Local Development:**
+- The app automatically loads from your existing `.env` file
+- Key: `1c5db918d7584047b8f24d017a835f31`
+
+**What NewsAPI Enables:**
+- ✅ Fetch latest news articles from 80,000+ sources
+- ✅ Real-time analysis of current events
+- ✅ Immediate fake news detection on breaking news
+- ✅ Compare model performance on live data
 
 ### 🎯 Features Available
 
@@ -68,11 +83,16 @@ streamlit run streamlit_app.py
 
 ### 🔍 Troubleshooting
 
+**Fixed Deployment Issues:**
+- ✅ **Python 3.13 Compatibility** - Removed heavy packages (gensim, tensorflow, torch)
+- ✅ **Requirements Streamlined** - Using minimal dependencies for fast deployment
+- ✅ **Build Errors Fixed** - No more C compilation issues
+
 **Common Issues:**
-1. **Memory errors** - Use `requirements_streamlit.txt` (lighter dependencies)
-2. **NLTK data** - App downloads required data automatically
-3. **Model loading** - Models are included in repository
-4. **Web scraping** - Some sites may block requests (normal behavior)
+1. **NLTK data** - App downloads required data automatically
+2. **Model loading** - Pre-trained models are included in repository
+3. **Web scraping** - Some sites may block requests (normal behavior)
+4. **NewsAPI** - Add your API key to Streamlit Cloud secrets for news fetching
 
 ### 🎓 Academic Credit
 

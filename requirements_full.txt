@@ -1,4 +1,4 @@
-# Minimal requirements for Streamlit Cloud deployment
+# Streamlined requirements for Streamlit Cloud deployment
 streamlit>=1.28.0
 pandas>=2.1.0
 numpy>=1.25.0

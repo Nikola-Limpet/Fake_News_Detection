@@ -482,11 +482,11 @@ def main():
         st.markdown("## ⚙️ Settings")
         
         # Model selection
-        available_models = ["Naive Bayes", "Random Forest", "LSTM", "BERT"]
+        available_models = ["Logistic Regression"]
         model_choice = st.selectbox(
             "Select Model",
             available_models,
-            help="Choose the AI model for prediction"
+            help="Our trained model for fake news detection"
         )
         
         # Confidence threshold
@@ -500,11 +500,32 @@ def main():
         
         # NewsAPI settings
         st.markdown("## 📰 News API Settings")
-        api_key = st.text_input(
-            "NewsAPI Key",
-            type="password",
-            help="Enter your NewsAPI key to fetch real-time news"
-        )
+
+        # Try to get API key from secrets or env
+        default_api_key = ""
+        try:
+            # Try Streamlit secrets first (for cloud deployment)
+            default_api_key = st.secrets.get("NEWS_API_KEY", "")
+        except:
+            # Fallback to environment variable (for local development)
+            try:
+                import os
+                from dotenv import load_dotenv
+                load_dotenv()
+                default_api_key = os.getenv("NEWS_API_KEY", "")
+            except:
+                pass
+
+        if default_api_key:
+            st.success("✅ NewsAPI key loaded automatically")
+            api_key = default_api_key
+            st.markdown("*Using configured API key for news fetching*")
+        else:
+            api_key = st.text_input(
+                "NewsAPI Key",
+                type="password",
+                help="Enter your NewsAPI key to fetch real-time news"
+            )
         
         if st.button("Fetch Latest News"):
             if api_key:
@@ -1015,11 +1036,11 @@ def main():
         st.markdown("### 🏆 Model Performance Comparison")
         
         performance_data = {
-            'Model': ['Naive Bayes', 'Random Forest', 'LSTM', 'BERT'],
-            'Accuracy': [0.89, 0.92, 0.94, 0.96],
-            'Precision': [0.87, 0.91, 0.93, 0.95],
-            'Recall': [0.88, 0.90, 0.92, 0.94],
-            'F1-Score': [0.87, 0.90, 0.92, 0.94]
+            'Model': ['Logistic Regression'],
+            'Accuracy': [0.974],
+            'Precision': [0.97],
+            'Recall': [0.98],
+            'F1-Score': [0.97]
         }
         
         df_performance = pd.DataFrame(performance_data)
@@ -1052,10 +1073,10 @@ def main():
             
             **Technologies Used:**
             - Python 3.8+
-            - TensorFlow/Keras for deep learning
-            - Transformers library for BERT
+            - Scikit-learn for machine learning
+            - NLTK for text processing
             - Streamlit for web interface
-            - LIME/SHAP for explainability
+            - BeautifulSoup for web scraping
             """)
 
     # Team Footer - appears on all pages
