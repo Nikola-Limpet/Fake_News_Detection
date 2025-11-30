@@ -163,6 +163,45 @@ class ModelLoader:
         """Get list of available models"""
         return list(self.models.keys())
 
+    def get_explainer(self, model_name='logistic'):
+        """
+        Get LIME explainer for specified model.
+
+        Args:
+            model_name: Name of the model to explain
+
+        Returns:
+            TextExplainer instance
+        """
+        if model_name not in self.models:
+            raise ValueError(f"Model {model_name} not loaded")
+
+        if self.vectorizer is None:
+            raise ValueError("Vectorizer not loaded")
+
+        from explainability import TextExplainer
+        return TextExplainer(
+            model=self.models[model_name],
+            vectorizer=self.vectorizer,
+            class_names=['REAL', 'FAKE']
+        )
+
+    def explain_prediction(self, text, model_name='logistic', num_features=10, num_samples=300):
+        """
+        Generate LIME explanation for a prediction.
+
+        Args:
+            text: Input text to explain
+            model_name: Model to use for explanation
+            num_features: Number of top words to show
+            num_samples: LIME sampling (lower = faster)
+
+        Returns:
+            Dictionary with explanation data
+        """
+        explainer = self.get_explainer(model_name)
+        return explainer.explain(text, num_features=num_features, num_samples=num_samples)
+
     def preprocess_text(self, text):
         """Basic text preprocessing (matches training preprocessing)"""
         import re

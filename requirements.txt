@@ -1,4 +1,5 @@
-# Minimal requirements for Streamlit Cloud deployment
+# Requirements for Fake News Detection with modern enhancements
+# Core
 streamlit>=1.28.0
 pandas>=2.1.0
 numpy>=1.25.0
@@ -10,3 +11,17 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
 joblib>=1.3.0
+
+# Explainability (LIME)
+lime>=0.2.0.1
+
+# Transformers (DistilBERT) - for local development
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.26.0
+
+# Image Processing (Deepfake Detection)
+Pillow>=10.0.0
+
+# Gemini AI for enhanced explanations
+google-generativeai>=0.3.0

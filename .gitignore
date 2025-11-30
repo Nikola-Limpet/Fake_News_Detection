@@ -104,11 +104,15 @@ $RECYCLE.BIN/
 # Exclude ensemble model (too large for GitHub - 5MB)
 models/ensemble_model.pkl
 
-# Data files (if large)
-# Uncomment if you want to exclude large datasets
-# data/*.csv
-# data/*.json
-# data/*.txt
+# Exclude transformer models (too large for GitHub - 256MB+)
+models/distilbert/
+models/bert/
+models/*/model.safetensors
+
+# Data files (large datasets - exceeds GitHub 100MB limit)
+data/*.csv
+data/*.json
+data/*.txt
 
 # Output files
 outputs/

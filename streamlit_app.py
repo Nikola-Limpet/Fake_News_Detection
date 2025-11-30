@@ -294,12 +294,66 @@ def load_models():
 # Import our working model utilities
 from model_utils import get_model_loader
 
+# Check if transformer is available
+def is_transformer_available():
+    """Check if DistilBERT model is available."""
+    try:
+        from transformer_model import TransformerClassifier, is_transformer_available as check_transformer
+        if not check_transformer():
+            return False
+        # Check if fine-tuned model exists
+        model_path = Path('models/distilbert')
+        return model_path.exists() and (model_path / 'config.json').exists()
+    except ImportError:
+        return False
+
+# Cache transformer model loading
+@st.cache_resource
+def load_transformer_model():
+    """Load transformer model (cached)."""
+    try:
+        from transformer_model import TransformerClassifier
+        classifier = TransformerClassifier(model_path='models/distilbert')
+        if classifier.load_model():
+            return classifier
+    except Exception as e:
+        logger.warning(f"Could not load transformer: {e}")
+    return None
+
+# Import Path for file checks
+from pathlib import Path
+import logging
+logger = logging.getLogger(__name__)
+
+# Import Gemini AI for enhanced explanations
+try:
+    from gemini_utils import is_gemini_available, get_gemini_explainer
+    GEMINI_AVAILABLE = is_gemini_available()
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 # Prediction function
 def make_prediction(text, models, preprocessor, model_choice):
     """Make prediction using selected model"""
 
     try:
-        # Use our working model_utils instead of the non-existent models
+        # Check if transformer model is selected
+        if "DistilBERT" in model_choice or "Transformer" in model_choice:
+            transformer = load_transformer_model()
+            if transformer is None:
+                st.warning("DistilBERT not available. Train it first with: `python train_transformer.py`")
+                return None, 0.5, "Transformer model not available"
+
+            with st.spinner("Running DistilBERT inference..."):
+                result = transformer.predict(text)
+
+            prediction = 1 if result['prediction'] == 'FAKE' else 0
+            confidence = result['confidence']
+            explanation = f"Prediction made using DistilBERT transformer with {confidence:.1%} confidence"
+
+            return prediction, confidence, explanation
+
+        # Use our working model_utils for sklearn models
         loader = get_model_loader()
 
         if not loader or not loader.get_available_models():
@@ -332,18 +386,175 @@ def make_prediction(text, models, preprocessor, model_choice):
         st.error(f"Prediction error: {str(e)}")
         return None, 0.5, f"Error: {str(e)}"
 
-# Simplified explainability function (without LIME dependency)
-def explain_prediction(text, model, vectorizer, prediction):
-    """Generate simple explanation for the prediction"""
-    try:
-        # Simple word frequency analysis as explanation
-        # This is a placeholder for more sophisticated explanation
-        words = text.lower().split()[:10]  # Top 10 words
-        weights = [0.1] * len(words)  # Placeholder weights
+# LIME Explainability function
+def render_lime_explanation(text, model_name, prediction):
+    """
+    Render LIME explainability visualization in Streamlit.
 
-        return words, weights
-    except:
-        return [], []
+    Args:
+        text: The input text that was analyzed
+        model_name: Internal model name (logistic, naive_bayes, random_forest)
+        prediction: The prediction result (0 for REAL, 1 for FAKE)
+    """
+    with st.expander("🔍 Why this prediction? (AI Explanation)", expanded=False):
+        try:
+            # Check if LIME is available
+            try:
+                import lime
+            except ImportError:
+                st.warning("LIME not installed. Run: `pip install lime`")
+                st.info("Install LIME to see word-level explanations for predictions.")
+                return
+
+            loader = get_model_loader()
+
+            with st.spinner("Generating explanation (this may take a few seconds)..."):
+                # Get explainer and generate explanation
+                explainer = loader.get_explainer(model_name)
+                explanation = explainer.explain(text, num_features=10, num_samples=300)
+
+                # Create tabs for different visualization views
+                tab1, tab2, tab3 = st.tabs(["📊 Word Impact", "📝 Highlighted Text", "📋 Details"])
+
+                with tab1:
+                    # Get visualization data
+                    viz_data = explainer.get_word_importance_data(explanation)
+
+                    # Create horizontal bar chart
+                    fig = go.Figure(go.Bar(
+                        x=viz_data['weights'],
+                        y=viz_data['words'],
+                        orientation='h',
+                        marker_color=viz_data['colors'],
+                        text=[f"{w:.3f}" for w in viz_data['weights']],
+                        textposition='outside'
+                    ))
+
+                    fig.update_layout(
+                        title="Word Impact on Prediction",
+                        xaxis_title="Impact (+ = FAKE, - = REAL)",
+                        yaxis_title="Words",
+                        height=400,
+                        yaxis={'categoryorder': 'total ascending'},
+                        showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#E6D8C3')
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.markdown("""
+                    **How to read this chart:**
+                    - 🔴 **Red bars (positive)**: Words that pushed the prediction toward **FAKE**
+                    - 🟢 **Green bars (negative)**: Words that pushed the prediction toward **REAL**
+                    - **Longer bars** = stronger influence on the prediction
+                    """)
+
+                with tab2:
+                    st.markdown("### Text with Key Words Highlighted")
+
+                    # Get highlighted HTML
+                    highlighted_html = explainer.get_highlighted_html(text, explanation)
+
+                    st.markdown(f"""
+                    <div style="background-color: #3c3c3c; padding: 20px; border-radius: 10px;
+                                line-height: 1.8; color: #E6D8C3; max-height: 400px; overflow-y: auto;">
+                    {highlighted_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("""
+                    **Legend:**
+                    - <span style="background-color: rgba(255,107,107,0.6); padding: 2px 6px; border-radius: 3px;">Red highlight</span> = Indicates **FAKE** news characteristics
+                    - <span style="background-color: rgba(81,207,102,0.6); padding: 2px 6px; border-radius: 3px;">Green highlight</span> = Indicates **REAL** news characteristics
+                    """, unsafe_allow_html=True)
+
+                with tab3:
+                    st.markdown("### Explanation Details")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Model Fidelity Score", f"{explanation['score']:.3f}")
+                        st.caption("How well LIME approximates the model locally (higher = better)")
+                    with col2:
+                        st.metric("Features Analyzed", len(explanation['words']))
+                        st.caption("Number of words considered in explanation")
+
+                    st.markdown("---")
+                    st.markdown("**Prediction Probabilities:**")
+                    prob_col1, prob_col2 = st.columns(2)
+                    with prob_col1:
+                        st.metric("REAL Probability", f"{explanation['prediction_proba']['REAL']:.1%}")
+                    with prob_col2:
+                        st.metric("FAKE Probability", f"{explanation['prediction_proba']['FAKE']:.1%}")
+
+                    st.markdown("---")
+                    st.markdown("**Top 5 Most Influential Words:**")
+                    for i, (word, weight) in enumerate(zip(explanation['words'][:5], explanation['weights'][:5])):
+                        direction = "FAKE" if weight > 0 else "REAL"
+                        color = "#ff6b6b" if weight > 0 else "#51cf66"
+                        st.markdown(
+                            f"{i+1}. **{word}**: <span style='color: {color}'>{weight:.4f}</span> "
+                            f"(pushes toward {direction})",
+                            unsafe_allow_html=True
+                        )
+
+        except ImportError as e:
+            st.warning(f"LIME library not available: {e}")
+            st.info("Install LIME to enable explainability: `pip install lime`")
+        except Exception as e:
+            st.error(f"Could not generate explanation: {str(e)}")
+            st.info("Try using Logistic Regression or Naive Bayes for best explainability results.")
+
+
+# Gemini AI Explanation function
+def render_gemini_explanation(text, prediction, confidence):
+    """
+    Render Gemini AI-powered explanation for the prediction.
+
+    Args:
+        text: The input text that was analyzed
+        prediction: The prediction result (0 for REAL, 1 for FAKE)
+        confidence: The confidence score
+    """
+    if not GEMINI_AVAILABLE:
+        return
+
+    with st.expander("🤖 AI-Powered Analysis (Gemini)", expanded=True):
+        try:
+            explainer = get_gemini_explainer()
+
+            if explainer is None:
+                st.warning("Gemini AI not available. Install with: `pip install google-generativeai`")
+                return
+
+            prediction_label = "FAKE" if prediction == 1 else "REAL"
+
+            with st.spinner("Generating AI analysis... This may take a few seconds."):
+                result = explainer.generate_explanation(
+                    text=text,
+                    prediction=prediction_label,
+                    confidence=confidence,
+                    key_words=None
+                )
+
+            if result.get("success"):
+                # Display the AI explanation with markdown formatting
+                st.markdown(result["explanation"])
+
+                # Add a note about AI limitations
+                st.markdown("---")
+                st.caption("*This analysis is generated by Gemini AI to help explain the prediction. "
+                          "Always verify important information through multiple reliable sources.*")
+            else:
+                error_msg = result.get("error", "Unknown error")
+                st.error(f"Could not generate AI explanation: {error_msg}")
+
+        except Exception as e:
+            st.error(f"Error with Gemini AI: {str(e)}")
+            st.info("The AI explanation feature requires the google-generativeai package.")
+
 
 # Fetch news from API (placeholder function)
 def fetch_news_from_api(query, api_key=None):
@@ -494,8 +705,21 @@ def main():
             }
             available_models = [model_display_names.get(model, model.title())
                               for model in loader.get_available_models()]
+
+            # Add DistilBERT if available
+            if is_transformer_available():
+                available_models.append("DistilBERT Transformer (Deep Learning)")
+                st.success("🤖 DistilBERT model available!")
         else:
             available_models = ["No models available"]
+
+        # Show model type info
+        st.markdown("**Model Types:**")
+        st.markdown("- 🔹 *Traditional ML*: Fast, interpretable")
+        if is_transformer_available():
+            st.markdown("- 🔸 *Transformer*: Higher accuracy, slower")
+        else:
+            st.info("💡 Train DistilBERT for better accuracy:\n`python train_transformer.py`")
 
         model_choice = st.selectbox(
             "Select Model",
@@ -564,7 +788,7 @@ def main():
             st.metric("Real News Detected", real_count)
     
     # Main content area
-    tab1, tab2, tab3, tab4 = st.tabs(["📝 Text Analysis", "📰 URL Analysis", "📊 Analytics", "❓ About"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Text Analysis", "📰 URL Analysis", "🖼️ Deepfake Detection", "📊 Analytics", "❓ About"])
     
     with tab1:
         st.markdown("### Enter News Article Text")
@@ -596,9 +820,9 @@ def main():
         
         else:  # Use Example
             examples = {
-                "Real News Example": "Scientists at MIT have developed a new artificial intelligence system that can detect early signs of Alzheimer's disease by analyzing speech patterns. The research, published in the journal Nature Medicine, shows that the AI model can identify cognitive decline years before traditional diagnostic methods. The team analyzed over 10,000 speech samples from patients and achieved an accuracy rate of 89% in early detection.",
-                
-                "Fake News Example": "BREAKING: Scientists discover that drinking lemon water every morning can cure cancer completely! Doctors are shocked and pharmaceutical companies are trying to hide this information from the public. Share this before it gets deleted! One weird trick that Big Pharma doesn't want you to know about. Thousands have already been cured using this simple method that costs less than $1."
+                "Real News Example": """The Senate passed a bipartisan infrastructure bill on Tuesday with a vote of 69-30, marking a significant legislative victory for President Biden. The $1.2 trillion package includes funding for roads, bridges, broadband internet, and electric vehicle charging stations. Senator Rob Portman, a Republican from Ohio who helped negotiate the deal, said the bill represents a historic investment in American infrastructure. The legislation now moves to the House of Representatives for consideration. Congressional Budget Office estimates suggest the bill would add approximately $256 billion to the federal deficit over the next decade. Transportation Secretary Pete Buttigieg praised the bipartisan effort, calling it a model for future cooperation.""",
+
+                "Fake News Example": "BREAKING: Scientists discover that drinking lemon water every morning can cure cancer completely! Doctors are shocked and pharmaceutical companies are trying to hide this information from the public. Share this before it gets deleted! One weird trick that Big Pharma doesn't want you to know about. Thousands have already been cured using this simple method that costs less than $1. The government doesn't want you to know this secret!"
             }
             
             selected_example = st.selectbox("Select Example", list(examples.keys()))
@@ -689,33 +913,26 @@ def main():
                     fig.update_layout(height=300)
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Explainability section
-                    if 'naive_bayes' in st.session_state.models and model_choice == "Naive Bayes":
-                        st.markdown("### 🔍 Explanation")
-                        
-                        with st.expander("Why this prediction?"):
-                            words, weights = explain_prediction(
-                                text_input,
-                                st.session_state.models['naive_bayes'],
-                                st.session_state.models['tfidf_vectorizer'],
-                                prediction
-                            )
-                            
-                            if words and weights:
-                                # Create bar chart for feature importance
-                                fig = px.bar(
-                                    x=weights[:10],
-                                    y=words[:10],
-                                    orientation='h',
-                                    title="Top Contributing Words",
-                                    labels={'x': 'Impact on Prediction', 'y': 'Words'},
-                                    color=weights[:10],
-                                    color_continuous_scale=['red', 'yellow', 'green']
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
-                            else:
-                                st.info("Explanation not available for this prediction")
-                    
+                    # LIME Explainability section
+                    st.markdown("### 🔍 Explanation")
+
+                    # Map UI model choice to internal model name
+                    model_map = {
+                        "Naive Bayes (94.4%)": "naive_bayes",
+                        "Random Forest (98.0%)": "random_forest",
+                        "Logistic Regression (97.4%)": "logistic",
+                        "Naive Bayes": "naive_bayes",
+                        "Random Forest": "random_forest",
+                        "Logistic Regression": "logistic"
+                    }
+                    internal_model_name = model_map.get(model_choice, "logistic")
+
+                    # Render LIME explanation
+                    render_lime_explanation(text_input, internal_model_name, prediction)
+
+                    # Render Gemini AI explanation
+                    render_gemini_explanation(text_input, prediction, confidence)
+
                     # Recommendations
                     st.markdown("### 💡 Recommendations")
                     
@@ -870,8 +1087,28 @@ def main():
                                 fig.update_layout(height=300)
                                 st.plotly_chart(fig, use_container_width=True)
 
+                                # LIME Explainability section for URL analysis
+                                st.markdown("### 🔍 AI Explanation")
+
+                                # Map UI model choice to internal model name
+                                url_model_map = {
+                                    "Naive Bayes (94.4%)": "naive_bayes",
+                                    "Random Forest (98.0%)": "random_forest",
+                                    "Logistic Regression (97.4%)": "logistic",
+                                    "Naive Bayes": "naive_bayes",
+                                    "Random Forest": "random_forest",
+                                    "Logistic Regression": "logistic"
+                                }
+                                url_internal_model = url_model_map.get(model_choice, "logistic")
+
+                                # Render LIME explanation for URL content
+                                render_lime_explanation(scraped_data['text'], url_internal_model, prediction)
+
+                                # Render Gemini AI explanation for URL content
+                                render_gemini_explanation(scraped_data['text'], prediction, confidence)
+
                                 # Source analysis
-                                st.markdown("### 🔍 Source Analysis")
+                                st.markdown("### 📰 Source Analysis")
 
                                 col1, col2 = st.columns(2)
                                 with col1:
@@ -905,8 +1142,176 @@ def main():
                                 st.error("Could not analyze the extracted text. Please try again.")
             else:
                 st.warning("Please enter a URL to analyze")
-    
+
+    # NEW TAB: Deepfake Detection
     with tab3:
+        st.markdown("### 🖼️ Deepfake Face Detection")
+        st.markdown("""
+        Detect AI-generated or manipulated human faces using a Vision Transformer model.
+        Upload an image to check if it's a real photograph or a deepfake.
+        """)
+
+        # Check if detector is available
+        try:
+            from src.image_detection import is_detector_available, get_image_detector
+            detector_available = is_detector_available()
+        except ImportError:
+            detector_available = False
+
+        if not detector_available:
+            st.warning("⚠️ Deepfake detection requires PyTorch and Transformers. Install with: `pip install torch transformers`")
+        else:
+            # Image input method
+            image_input_method = st.radio(
+                "Input Method",
+                ["Upload Image", "Use Example"],
+                horizontal=True,
+                key="image_input_method"
+            )
+
+            uploaded_image = None
+            image_to_analyze = None
+
+            if image_input_method == "Upload Image":
+                uploaded_image = st.file_uploader(
+                    "Choose an image file",
+                    type=['jpg', 'jpeg', 'png', 'webp'],
+                    help="Supported formats: JPG, JPEG, PNG, WEBP"
+                )
+
+                if uploaded_image:
+                    from PIL import Image
+                    image_to_analyze = Image.open(uploaded_image)
+
+            else:  # Use Example
+                st.markdown("**Example Images:**")
+
+                # Map example names to actual files
+                example_images = {
+                    "Real Face 1": "sample_images/real_face_1.jpg",
+                    "Real Face 2": "sample_images/real_face_2.jpg",
+                    "Real Face 3": "sample_images/real_face_3.jpg",
+                    "AI Generated Face 1": "sample_images/ai_generated_1.jpg",
+                    "AI Generated Face 2": "sample_images/ai_generated_2.jpg",
+                }
+
+                example_choice = st.selectbox(
+                    "Select an example",
+                    list(example_images.keys()),
+                    key="deepfake_example"
+                )
+
+                # Load the selected example image
+                import os
+                from PIL import Image
+                example_path = example_images[example_choice]
+                if os.path.exists(example_path):
+                    image_to_analyze = Image.open(example_path)
+                    st.success(f"✅ Loaded: {example_choice}")
+                else:
+                    st.warning(f"⚠️ Image not found: {example_path}")
+                    st.info("*For demo: Try uploading images from thispersondoesnotexist.com*")
+
+            # Display uploaded image and analyze
+            if image_to_analyze:
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    st.image(image_to_analyze, caption="Uploaded Image", use_container_width=True)
+
+                # Analyze button
+                if st.button("🔍 Detect Deepfake", type="primary", use_container_width=True):
+                    with st.spinner("Analyzing image with Vision Transformer..."):
+                        try:
+                            detector = get_image_detector()
+
+                            if detector is None:
+                                st.error("Failed to load deepfake detector model.")
+                            else:
+                                result = detector.predict(image_to_analyze)
+
+                                # Display result
+                                with col2:
+                                    if result['prediction'] == 'DEEPFAKE':
+                                        st.markdown(
+                                            f"""
+                                            <div class='prediction-box fake-news'>
+                                                <h2 style='color: #ff6b6b;'>🤖 DEEPFAKE DETECTED</h2>
+                                                <h3>Confidence: {result['confidence']:.1%}</h3>
+                                                <p>This face appears to be AI-generated or manipulated.</p>
+                                            </div>
+                                            """,
+                                            unsafe_allow_html=True
+                                        )
+                                    else:
+                                        st.markdown(
+                                            f"""
+                                            <div class='prediction-box real-news'>
+                                                <h2 style='color: #90ee90;'>📷 REAL FACE</h2>
+                                                <h3>Confidence: {result['confidence']:.1%}</h3>
+                                                <p>This appears to be a genuine photograph.</p>
+                                            </div>
+                                            """,
+                                            unsafe_allow_html=True
+                                        )
+
+                                # Confidence gauge
+                                st.markdown("### Confidence Meter")
+                                fig = go.Figure(go.Indicator(
+                                    mode="gauge+number",
+                                    value=result['confidence'] * 100,
+                                    title={'text': "Detection Confidence"},
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    gauge={
+                                        'axis': {'range': [None, 100]},
+                                        'bar': {'color': "darkblue"},
+                                        'steps': [
+                                            {'range': [0, 50], 'color': "lightgray"},
+                                            {'range': [50, 80], 'color': "yellow"},
+                                            {'range': [80, 100], 'color': "green"}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 70
+                                        }
+                                    }
+                                ))
+                                fig.update_layout(height=300)
+                                st.plotly_chart(fig, use_container_width=True)
+
+                                # Probability breakdown
+                                st.markdown("### Probability Breakdown")
+                                prob_col1, prob_col2 = st.columns(2)
+                                with prob_col1:
+                                    st.metric("Real Probability", f"{result['probability']['REAL']:.1%}")
+                                with prob_col2:
+                                    st.metric("Deepfake Probability", f"{result['probability']['DEEPFAKE']:.1%}")
+
+                                # Recommendations
+                                st.markdown("### 💡 Recommendations")
+                                if result['prediction'] == 'DEEPFAKE':
+                                    st.warning("""
+                                    **⚠️ This image may be artificially generated:**
+                                    - Be cautious about trusting this image
+                                    - Look for other verification sources
+                                    - Check for inconsistencies in lighting, hair, or background
+                                    - Reverse image search to find the original
+                                    - Report suspected deepfakes on social media platforms
+                                    """)
+                                else:
+                                    st.success("""
+                                    **✅ This appears to be a genuine photograph:**
+                                    - The image shows characteristics of real photography
+                                    - Still verify important images from multiple sources
+                                    - No AI generation patterns detected
+                                    """)
+
+                        except Exception as e:
+                            st.error(f"Error analyzing image: {str(e)}")
+                            st.info("Make sure PyTorch and Transformers are installed correctly.")
+
+    with tab4:
         st.markdown("### 📊 Analytics Dashboard")
         
         if st.session_state.history:
@@ -1005,7 +1410,7 @@ def main():
         else:
             st.info("No predictions yet. Analyze some articles to see analytics.")
     
-    with tab4:
+    with tab5:
         st.markdown("### About This System")
         
         st.markdown("""
@@ -1024,8 +1429,9 @@ def main():
         
         #### 📊 **Features**
         - **Multi-model Support**: Choose from different AI models
-        - **Explainable AI**: Understand why a prediction was made (LIME/SHAP)
+        - **Explainable AI**: Understand why a prediction was made (LIME)
         - **Real-time Analysis**: Instant predictions on text or URLs
+        - **Deepfake Detection**: Detect AI-generated faces using Vision Transformer
         - **Analytics Dashboard**: Track and visualize prediction history
         - **Confidence Scoring**: See how certain the model is about its prediction
         

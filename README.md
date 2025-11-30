@@ -126,10 +126,16 @@ python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk
 
 ## 📊 Dataset Setup
 
-### Option 1: Kaggle Dataset
+> **Note**: Data files are not included in this repository due to GitHub's 100MB file size limit.
+
+### Option 1: Kaggle Dataset (Recommended)
 1. Download from [Kaggle Fake and Real News Dataset](https://www.kaggle.com/datasets/clmentbisaillon/fake-and-real-news-dataset)
-2. Extract to the `data/` directory
-3. Ensure the CSV has columns: `text` and `label`
+2. Extract `Fake.csv` and `True.csv` to the `data/` directory
+3. Run the data preparation script:
+```bash
+python data_preparation.py
+```
+This will create `fake_news_data.csv`, `train.csv`, `test.csv`, and `validation.csv` in the `data/` folder.
 
 ### Option 2: Custom Dataset
 Your dataset should have the following format:
@@ -138,14 +144,27 @@ text,label
 "Article content here...",REAL
 "Another article...",FAKE
 ```
-
-### Option 3: Use the Data Preparation Script
-Process your own data:
-```bash
-python data_preparation.py
-```
+Place it in the `data/` directory as `fake_news_data.csv`.
 
 ## 💻 Usage
+
+### Quick Start (TL;DR)
+```bash
+# 1. Clone and setup
+git clone https://github.com/your-username/fake-news-detection.git
+cd fake-news-detection
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Download dataset from Kaggle (see Dataset Setup section)
+# Place Fake.csv and True.csv in data/ folder
+
+# 3. Prepare data
+python data_preparation.py
+
+# 4. Run the app
+streamlit run streamlit_app.py
+```
 
 ### Data Preparation
 1. **Prepare the dataset:**
@@ -153,20 +172,10 @@ python data_preparation.py
 python data_preparation.py
 ```
 
-### Training the Models
-1. **Run the complete training pipeline:**
+### Training the Models (Optional)
+Pre-trained models are included. To retrain:
 ```bash
-python fake_news_detection.py
-```
-
-2. **Use trained models:**
-```python
-from model_utils import get_model_loader
-
-loader = get_model_loader()
-result = loader.predict("Your news article text here...")
-print(f"Prediction: {result['prediction']}")
-print(f"Confidence: {result['confidence']:.3f}")
+python train_transformer.py  # For transformer model
 ```
 
 ### Running the Streamlit App
