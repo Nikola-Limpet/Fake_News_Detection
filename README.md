@@ -7,6 +7,8 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.25-red)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+<img width="2880" height="1800" alt="Screenshot from 2025-11-30 14-28-33" src="https://github.com/user-attachments/assets/2469ab2c-58a2-41c1-aeeb-f75e15ec790e" />
+
 ## 📋 Table of Contents
 - [Overview](#overview)
 - [Features](#features)
